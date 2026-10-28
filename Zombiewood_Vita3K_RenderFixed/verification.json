@@ -1,0 +1,13 @@
+{
+  "android_imports_mapped_by_name": 364,
+  "android_exports": 35581,
+  "missing_import_names": [],
+  "vpk_crc": "pass",
+  "vpk_eboot_matches_build": true,
+  "vpk_sha256": "8bbce24e463e91ae232218f92c6f28cd6b978265fee4138e06ac38240864dfbb",
+  "obb_entries_crc_checked": {
+    "main.1501.com.gameloft.android.ANMP.GloftZOHM.obb": 562,
+    "patch.15325.com.gameloft.android.ANMP.GloftZOHM.obb": 2
+  },
+  "playability": "NOT VERIFIED"
+}

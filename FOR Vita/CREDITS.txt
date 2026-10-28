@@ -1,0 +1,18 @@
+Zombiewood game and game assets: Gameloft.
+
+Port components include vitaGL by Rinnegatamante and contributors, VitaSDK,
+so_util and Android compatibility code by their respective contributors,
+FalsoJNI/FalsoNDK, and vitaShaRK/SceShaccCgExt.
+The vitaGL license texts are included in licenses/.
+
+kuBridge v0.3.1_hotfix: bythos14 and contributors
+https://github.com/bythos14/kubridge
+
+FdFix v1.0: TheOfficialFloW
+https://github.com/TheOfficialFloW/FdFix
+
+vitaGL source
+https://github.com/Rinnegatamante/vitaGL
+
+The matching local port source, including the bundled vitaGL source and its
+modifications, is retained in ../audit/vita-release/source/ on this PC.

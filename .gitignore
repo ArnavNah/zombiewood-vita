@@ -1,0 +1,7 @@
+/build*/
+/audit/
+*.o
+*.obj
+*.a
+*.velf
+__pycache__/

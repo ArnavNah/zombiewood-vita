@@ -1,0 +1,7 @@
+*.vpk filter=lfs diff=lfs merge=lfs -text
+*.bin filter=lfs diff=lfs merge=lfs -text
+*.skprx filter=lfs diff=lfs merge=lfs -text
+FOR[[:space:]]Vita/data/** filter=lfs diff=lfs merge=lfs -text
+Zombiewood_Vita3K_RenderFixed/data/** filter=lfs diff=lfs merge=lfs -text
+FOR[[:space:]]Vita/** -text
+Zombiewood_Vita3K_RenderFixed/** -text

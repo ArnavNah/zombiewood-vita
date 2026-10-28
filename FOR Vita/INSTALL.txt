@@ -1,0 +1,41 @@
+Zombiewood for PlayStation Vita
+
+1. Copy the included data folder to the root of ux0: using VitaShell.
+   The game library must be at ux0:data/zombiewood/libZombieWood.so.
+   Keep all the included assets and both OBB files together in that folder.
+
+2. Install Zombiewood.vpk with VitaShell, then launch Zombiewood.
+
+Required Vita setup
+- Enable unsafe homebrew in HENkaku settings.
+- Install kuBridge. If it is not already installed, copy plugins/kubridge.skprx
+  to ur0:tai/ and add ur0:tai/kubridge.skprx under *KERNEL in tai/config.txt.
+  Reboot after changing kernel plugins. Do not add a duplicate entry.
+- The Sony shader compiler must already be present at
+  ur0:data/libshacccg.suprx. It is not included in this package.
+- For suspend/resume file handling, install the included fd_fix.skprx under
+  *KERNEL in the same way, unless rePatch is installed. Do not combine fd_fix
+  with rePatch, which already handles this case.
+
+Controls
+- Menus: D-pad or left stick moves the gold selection cursor; Cross selects.
+- Gameplay: left stick moves; right stick aims and fires.
+- Start pauses; Circle goes back.
+- L/R switch weapons; Square/Triangle are alternate weapon-switch buttons.
+- Touch input remains available. Touch sticks hide when using buttons/sticks.
+
+Release settings
+- Native 960 x 544 output; 60 FPS target.
+- The game's middle device profile reduces graphics load in busy fights.
+- Hardware ETC1 textures and compiled-shader caching are enabled.
+- Continuous stereo PCM buffering preserves left/right channel order.
+- The original game loading animation is retained.
+
+This package contains the physical-Vita release. Its hardware texture path is
+different from the PC emulator build. Physical-Vita performance and long-session
+stability still need testing; a constant 60 FPS has not been established.
+The first launch may take longer while shaders are compiled and cached.
+
+Your existing PC saves are not overwritten or included in this clean package.
+If this title was previously installed on Vita, back up your save files before
+updating. Keep the game's .dat save files when replacing assets.
