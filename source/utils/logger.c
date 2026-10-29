@@ -17,6 +17,7 @@
 #include <stdatomic.h>
 #include <psp2/kernel/sysmem.h>
 #include <malloc.h>
+#include <pthread.h>
 
 void hardware_log_begin(void) {
 #ifdef USE_KUBRIDGE
@@ -49,8 +50,7 @@ void hardware_checkpoint(const char *stage) {
 
 #define COLOR_END    "\033[0m"
 
-static SceKernelLwMutexWork _log_mutex;
-static atomic_bool _log_mutex_ready = ATOMIC_VAR_INIT(false);
+static pthread_mutex_t _log_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 // Buffer A is used to adjust the format string.
 static char buffer_a[2048];
@@ -58,15 +58,7 @@ static char buffer_a[2048];
 static char buffer_b[2048];
 
 void _log_print(int t, const char* fmt, ...) {
-    if (!atomic_load_explicit(&_log_mutex_ready, memory_order_relaxed)) {
-        int ret = sceKernelCreateLwMutex(&_log_mutex, "log_lock", 0, 0, NULL);
-        if (ret < 0) {
-            sceClibPrintf("Error: failed to create log mutex: 0x%x\n", ret);
-            return;
-        }
-        atomic_store_explicit(&_log_mutex_ready, true, memory_order_relaxed);
-    }
-    sceKernelLockLwMutex(&_log_mutex, 1, NULL);
+    if (pthread_mutex_lock(&_log_mutex)) return;
 
     switch (t) {
         case LT_DEBUG:
@@ -91,9 +83,7 @@ void _log_print(int t, const char* fmt, ...) {
             sceClibSnprintf(buffer_a, sizeof(buffer_a), " %s… waiting%s  %s\n",
                             COLOR_CYAN, COLOR_END, fmt); break;
         default:
-            if (atomic_load_explicit(&_log_mutex_ready, memory_order_relaxed)) {
-                sceKernelUnlockLwMutex(&_log_mutex, 1);
-            }
+            pthread_mutex_unlock(&_log_mutex);
             return;
     }
 
@@ -109,7 +99,5 @@ void _log_print(int t, const char* fmt, ...) {
         sceIoClose(fd);
     }
 
-    if (atomic_load_explicit(&_log_mutex_ready, memory_order_relaxed)) {
-        sceKernelUnlockLwMutex(&_log_mutex, 1);
-    }
+    pthread_mutex_unlock(&_log_mutex);
 }

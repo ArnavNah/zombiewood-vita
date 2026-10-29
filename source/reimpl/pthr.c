@@ -15,6 +15,8 @@
 #include <psp2/kernel/clib.h>
 #include <psp2/kernel/threadmgr.h>
 #include <stdatomic.h>
+#include <errno.h>
+#include <psp2/kernel/error.h>
 
 #include "utils/utils.h"
 #include "utils/logger.h"
@@ -40,24 +42,12 @@ enum {
 #define PTHR_INLINE static inline __attribute__((always_inline))
 
 void * initializedObjects[PTHR_MAX_OBJECTS] = {0};
-static SceKernelLwMutexWork pthr_mutex;
-static volatile short int pthr_mutex_inited = 0;
+static pthread_mutex_t pthr_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t object_init_mutex = PTHREAD_MUTEX_INITIALIZER;
 
-#define PTHR_LOCK \
-    if (!pthr_mutex_inited) { \
-        int ret = sceKernelCreateLwMutex(&pthr_mutex, "log_lock", 0, 0, NULL); \
-        if (ret < 0) { \
-            sceClibPrintf("Error: failed to create pthr mutex: 0x%x\n", ret); \
-            return 0; \
-        } \
-        pthr_mutex_inited = 1; \
-    } \
-    sceKernelLockLwMutex(&pthr_mutex, 1, NULL);
+#define PTHR_LOCK pthread_mutex_lock(&pthr_mutex);
 
-#define PTHR_UNLOCK \
-    if (pthr_mutex_inited) { \
-        sceKernelUnlockLwMutex(&pthr_mutex, 1); \
-    }
+#define PTHR_UNLOCK pthread_mutex_unlock(&pthr_mutex);
 
 int isObjectInitialized(const void * mut) {
     PTHR_LOCK
@@ -99,20 +89,30 @@ int forgetObject(const void * mut) {
 
 // null check for `attr` must be performed before this
 PTHR_INLINE int _attr_t_static_init(pthread_attr_t_bionic * attr) {
+    pthread_mutex_lock(&object_init_mutex);
+    int ret = 0;
     if (attr->magic != 0x42424242) {
-        attr->magic = 0x42424242;
         attr->real_ptr = malloc(sizeof(pthread_attr_t));
-        return pthread_attr_init(attr->real_ptr);
+        if (!attr->real_ptr) ret = ENOMEM;
+        else {
+            ret = pthread_attr_init(attr->real_ptr);
+            if (!ret) ret = pthread_attr_setstacksize(attr->real_ptr, 1024 * 1024);
+            if (ret) { free(attr->real_ptr); attr->real_ptr = NULL; }
+            else { attr->stack_size = 1024 * 1024; attr->magic = 0x42424242; }
+        }
     }
-    return 0;
+    pthread_mutex_unlock(&object_init_mutex);
+    return ret;
 }
 
 // null check for `mutex` param must be performed before this, `attr` is fine as null
 PTHR_INLINE int _mutex_t_static_init(pthread_mutex_t_bionic * mutex, const pthread_mutexattr_t * attr) {
     int ret = 0, kind = PTHREAD_MUTEX_NORMAL;
-
+    if (isObjectInitialized(mutex)) return 0;
+    pthread_mutex_lock(&object_init_mutex);
     if (isObjectInitialized(mutex)) {
         //logv_debug("mutex already initialized: %p", mutex);
+        pthread_mutex_unlock(&object_init_mutex);
         return ret;
     }
 
@@ -124,9 +124,8 @@ PTHR_INLINE int _mutex_t_static_init(pthread_mutex_t_bionic * mutex, const pthre
         else if (* (int *) mutex == BIONIC_PTHREAD_ERRORCHECK_MUTEX_INITIALIZER) kind = PTHREAD_MUTEX_ERRORCHECK;
     }
 
-    pthread_mutex_t mut;
     mutex->real_ptr = malloc(sizeof(pthread_mutex_t));
-    sceClibMemcpy(mutex->real_ptr, &mut, sizeof(pthread_mutex_t));
+    if (!mutex->real_ptr) { pthread_mutex_unlock(&object_init_mutex); return ENOMEM; }
 
     pthread_mutexattr_t mutattr;
     pthread_mutexattr_init(&mutattr);
@@ -135,35 +134,40 @@ PTHR_INLINE int _mutex_t_static_init(pthread_mutex_t_bionic * mutex, const pthre
     pthread_mutexattr_destroy(&mutattr);
 
     if (ret == 0) {
-        rememberObject(mutex);
+        if (!rememberObject(mutex)) { pthread_mutex_destroy(mutex->real_ptr); ret = EAGAIN; }
     } else {
         l_error("mutex initialization for %p has failed", mutex);
     }
 
+    if (ret) { free(mutex->real_ptr); mutex->real_ptr = NULL; }
+    pthread_mutex_unlock(&object_init_mutex);
     return ret;
 }
 
 // null check for `cond` param must be performed before this, `attr` is fine as null
 PTHR_INLINE int _cond_t_static_init(pthread_cond_t_bionic * cond, const pthread_condattr_t * attr) {
     int ret = 0;
-
+    if (isObjectInitialized(cond)) return 0;
+    pthread_mutex_lock(&object_init_mutex);
     if (isObjectInitialized(cond)) {
         //logv_debug("cond already initialized: %p", cond);
+        pthread_mutex_unlock(&object_init_mutex);
         return ret;
     }
 
-    pthread_cond_t c;
     cond->real_ptr = malloc(sizeof(pthread_cond_t));
-    sceClibMemcpy(cond->real_ptr, &c, sizeof(pthread_cond_t));
+    if (!cond->real_ptr) { pthread_mutex_unlock(&object_init_mutex); return ENOMEM; }
 
     ret = pthread_cond_init(cond->real_ptr, attr);
 
     if (ret == 0) {
-        rememberObject(cond);
+        if (!rememberObject(cond)) { pthread_cond_destroy(cond->real_ptr); ret = EAGAIN; }
     } else {
         l_error("cond initialization for %p has failed", cond);
     }
 
+    if (ret) { free(cond->real_ptr); cond->real_ptr = NULL; }
+    pthread_mutex_unlock(&object_init_mutex);
     return ret;
 }
 
@@ -173,12 +177,12 @@ int pthread_create_soloader(pthread_t *thread, const pthread_attr_t_bionic *attr
     if (!attr) {
         pthread_attr_t a;
         pthread_attr_init(&a);
-        pthread_attr_setstacksize(&a, 512 * 1024);
+        pthread_attr_setstacksize(&a, 1024 * 1024);
         ret = pthread_create(thread, &a, start, param);
         pthread_attr_destroy(&a);
     } else{
-        _attr_t_static_init((pthread_attr_t_bionic *) attr);
-        pthread_attr_setstacksize(attr->real_ptr, 512 * 1024);
+        ret = _attr_t_static_init((pthread_attr_t_bionic *) attr);
+        if (ret) return ret;
         ret = pthread_create(thread, attr->real_ptr, start, param);
     }
 
@@ -214,24 +218,29 @@ int pthread_mutex_init_soloader(pthread_mutex_t_bionic *uid, const pthread_mutex
 int pthread_mutex_destroy_soloader(pthread_mutex_t_bionic *mutex)
 {
     if (!mutex) return 0;
-    forgetObject(mutex);
+    if (!isObjectInitialized(mutex)) return EINVAL;
     int ret = pthread_mutex_destroy(mutex->real_ptr);
-    if (mutex->real_ptr) free(mutex->real_ptr);
-    mutex->real_ptr = 0x0;
+    if (!ret) {
+        forgetObject(mutex);
+        free(mutex->real_ptr);
+        mutex->real_ptr = NULL;
+    }
     return ret;
 }
 
 int pthread_mutex_lock_soloader(pthread_mutex_t_bionic *mutex)
 {
     if (!mutex) return EINVAL;
-    _mutex_t_static_init(mutex, NULL);
+    int ret = _mutex_t_static_init(mutex, NULL);
+    if (ret) return ret;
     return pthread_mutex_lock(mutex->real_ptr);
 }
 
 int pthread_mutex_trylock_soloader(pthread_mutex_t_bionic *mutex)
 {
     if (!mutex) return EINVAL;
-    _mutex_t_static_init(mutex, NULL);
+    int ret = _mutex_t_static_init(mutex, NULL);
+    if (ret) return ret;
     return pthread_mutex_trylock(mutex->real_ptr);
 }
 
@@ -270,10 +279,13 @@ int pthread_cond_init_soloader(pthread_cond_t_bionic *cond,
 int pthread_cond_destroy_soloader(pthread_cond_t_bionic *cond)
 {
     if (!cond) return 0;
-    forgetObject(cond);
+    if (!isObjectInitialized(cond)) return EINVAL;
     int ret = pthread_cond_destroy(cond->real_ptr);
-    if (cond->real_ptr) free(cond->real_ptr);
-    cond->real_ptr = 0x0;
+    if (!ret) {
+        forgetObject(cond);
+        free(cond->real_ptr);
+        cond->real_ptr = NULL;
+    }
     return ret;
 }
 
@@ -281,7 +293,8 @@ int pthread_cond_signal_soloader(pthread_cond_t_bionic *cond)
 {
     if (!cond) return EINVAL;
 
-    _cond_t_static_init(cond, NULL);
+    int ret = _cond_t_static_init(cond, NULL);
+    if (ret) return ret;
 
     return pthread_cond_signal(cond->real_ptr);
 }
@@ -290,8 +303,10 @@ int pthread_cond_timedwait_soloader(pthread_cond_t_bionic *cond, pthread_mutex_t
 {
     if (!cond || !mutex) return EINVAL;
 
-    _cond_t_static_init(cond, NULL);
-    _mutex_t_static_init(mutex, NULL);
+    int ret = _cond_t_static_init(cond, NULL);
+    if (ret) return ret;
+    ret = _mutex_t_static_init(mutex, NULL);
+    if (ret) return ret;
 
     return pthread_cond_timedwait(cond->real_ptr, mutex->real_ptr, abstime);
 }
@@ -301,8 +316,10 @@ int pthread_cond_wait_soloader(pthread_cond_t_bionic *cond, pthread_mutex_t_bion
 {
     if (!cond || !mutex) return EINVAL;
 
-    _cond_t_static_init(cond, NULL);
-    _mutex_t_static_init(mutex, NULL);
+    int ret = _cond_t_static_init(cond, NULL);
+    if (ret) return ret;
+    ret = _mutex_t_static_init(mutex, NULL);
+    if (ret) return ret;
 
     return pthread_cond_wait(cond->real_ptr, mutex->real_ptr);
 }
@@ -311,7 +328,8 @@ int pthread_cond_broadcast_soloader(pthread_cond_t_bionic *cond)
 {
     if (!cond) return EINVAL;
 
-    _cond_t_static_init(cond, NULL);
+    int ret = _cond_t_static_init(cond, NULL);
+    if (ret) return ret;
 
     return pthread_cond_broadcast(cond->real_ptr);
 }
@@ -319,7 +337,7 @@ int pthread_cond_broadcast_soloader(pthread_cond_t_bionic *cond)
 int pthread_attr_init_soloader(pthread_attr_t_bionic *attr)
 {
     if (!attr) return EINVAL;
-
+    attr->magic = 0;
     return _attr_t_static_init(attr);
 }
 
@@ -338,15 +356,20 @@ int pthread_attr_destroy_soloader(pthread_attr_t_bionic *attr)
 int pthread_attr_setdetachstate_soloader(pthread_attr_t_bionic *attr, int state)
 {
     if (!attr) return -1;
-    _attr_t_static_init(attr);
-    state = !state; // pthread-embedded has JOINABLE/DETACHED swapped compared to BIONIC...
+    int ret = _attr_t_static_init(attr);
+    if (ret) return ret;
+    if (state != 0 && state != 1) return EINVAL;
+    state = state ? PTHREAD_CREATE_DETACHED : PTHREAD_CREATE_JOINABLE;
     return pthread_attr_setdetachstate(attr->real_ptr, state);
 }
 
 int pthread_attr_setstacksize_soloader(pthread_attr_t_bionic *attr, size_t stacksize) {
     if (!attr) return -1;
-    _attr_t_static_init(attr);
-    return pthread_attr_setstacksize(attr->real_ptr, stacksize);
+    int ret = _attr_t_static_init(attr);
+    if (ret) return ret;
+    ret = pthread_attr_setstacksize(attr->real_ptr, stacksize);
+    if (!ret) attr->stack_size = stacksize;
+    return ret;
 }
 
 int pthread_setschedparam_soloader(pthread_t thread, int policy,
@@ -383,8 +406,17 @@ pthread_t pthread_self_soloader()
 int pthread_once_soloader(volatile int *once_control, void (*init_routine)(void)) {
     if (!once_control || !init_routine)
         return -1;
-    if (__sync_lock_test_and_set(once_control, 1) == 0)
+    // Publish completion separately from ownership. A competing thread must
+    // not observe partially initialized renderer/audio state.
+    if (__atomic_load_n(once_control, __ATOMIC_ACQUIRE) == 2) return 0;
+    int expected = 0;
+    if (__atomic_compare_exchange_n(once_control, &expected, 1, 0, __ATOMIC_ACQUIRE, __ATOMIC_ACQUIRE)) {
         (*init_routine)();
+        __atomic_store_n(once_control, 2, __ATOMIC_RELEASE);
+    } else {
+        while (__atomic_load_n(once_control, __ATOMIC_ACQUIRE) != 2)
+            sceKernelDelayThread(50);
+    }
     return 0;
 }
 
@@ -436,17 +468,19 @@ int sem_post_soloader (int * uid) {
 }
 
 int sem_timedwait_soloader (int * uid, const struct timespec * abstime) {
-    uint timeout = 1000;
-    if (sceKernelWaitSema(*uid, 1, &timeout) >= 0)
-        return 0;
-    if (!abstime) return -1;
-    long long now = (long long) current_timestamp_ms() * 1000; // us
-    long long _timeout = abstime->tv_sec * 1000 * 1000 + abstime->tv_nsec / 1000; // us
-    if (_timeout-now >= 0) return -1;
-    uint timeout_real = _timeout - now;
-    if (sceKernelWaitSema(*uid, 1, &timeout_real) < 0)
-        return -1;
-    return 0;
+    if (!uid || !abstime || abstime->tv_nsec<0 || abstime->tv_nsec>=1000000000L) {
+        errno=EINVAL; return -1;
+    }
+    if (sceKernelPollSema(*uid,1)>=0) return 0;
+    int64_t deadline=(int64_t)abstime->tv_sec*1000000+abstime->tv_nsec/1000;
+    for (;;) {
+        int64_t remaining=deadline-(int64_t)current_timestamp_ms()*1000;
+        if (remaining<=0) { errno=ETIMEDOUT; return -1; }
+        unsigned timeout=remaining>UINT32_MAX?UINT32_MAX:(unsigned)remaining;
+        int ret=sceKernelWaitSema(*uid,1,&timeout);
+        if (ret>=0) return 0;
+        if (ret!=SCE_KERNEL_ERROR_WAIT_TIMEOUT) { errno=EINVAL; return -1; }
+    }
 }
 
 int sem_trywait_soloader (int * uid) {

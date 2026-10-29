@@ -1,4 +1,4 @@
-Zombiewood for PlayStation Vita - revision 01.54
+Zombiewood for PlayStation Vita - revision 01.55
 
 1. Copy the included data folder to the root of ux0: using VitaShell.
    The game library must be at ux0:data/zombiewood/libZombieWood.so.
@@ -41,9 +41,14 @@ Your existing PC saves are not overwritten or included in this clean package.
 If this title was previously installed on Vita, back up your save files before
 updating. Keep the game's .dat save files when replacing assets.
 
-Updating from revision 01.53
+Updating from revision 01.53 or 01.54
 Install the new Zombiewood.vpk over the existing application. The data files
 are unchanged; keep your saves. Do not copy the Vita3K VPK onto the Vita.
 If startup still fails, send ux0:data/zombiewood/hardware-startup.log and
 ux0:data/zombiewood/error.log if present. The startup log records initialization
 stages and memory counts; it does not record save contents or personal data.
+
+Revision 01.55: corrected Android thread initialization, mutex/condition creation
+races, explicit stack sizes, semaphore deadlines and logger synchronization.
+The automated ARM thread test passed 12/12 checks; physical startup remains
+unverified. This package does not include the test runner.

@@ -86,3 +86,13 @@ It checks required data paths and records startup stages in
 ux0:data/zombiewood/hardware-startup.log. Install only the updated hardware VPK;
 the data is unchanged. This revision needs a physical-device retest and does not
 establish that the startup failure is resolved. The PC package is retained.
+
+## Compatibility review revision 01.55
+
+The current hardware VPK includes corrected pthread_once completion, serialized
+Android mutex/condition creation, preservation of requested thread stack sizes,
+64-bit semaphore deadlines and safe logger initialization. The ARM compatibility
+test passed 12/12 checks through Vita3K; the test runner is not in the VPK.
+See [REVIEW.md](REVIEW.md) for findings, the Backstab port comparison and limits.
+Physical-device startup is still not confirmed fixed. Install the updated VPK
+over the current application; game data is unchanged.
