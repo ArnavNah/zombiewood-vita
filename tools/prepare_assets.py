@@ -1,4 +1,4 @@
-"""Prepare the user's Zombiewood files for the isolated Vita3K test."""
+"""Prepare Zombiewood runtime assets from the original APK and OBB files."""
 import argparse
 import hashlib
 import json

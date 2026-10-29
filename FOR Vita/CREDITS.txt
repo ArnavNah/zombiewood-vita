@@ -15,4 +15,4 @@ vitaGL source
 https://github.com/Rinnegatamante/vitaGL
 
 The matching local port source, including the bundled vitaGL source and its
-modifications, is retained in ../audit/vita-release/source/ on this PC.
+modifications, is retained in the repository root, alongside the FOR Vita folder.

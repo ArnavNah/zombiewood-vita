@@ -1,13 +1,14 @@
 # Zombiewood for PS Vita
 
-Android ARMv7 v1.5.3 port with Vita controls, stereo PCM output, vitaGL rendering,
-offline operation, corrected file metadata/save handling, and the original
-loading animation.
+Android ARMv7 v1.5.3 port, hardware revision **01.55**.
 
-## Download the complete files
+**Hardware status:** a Vita-1000 startup failure was reported with revision 01.53.
+Revisions 01.54/01.55 address compatibility issues, but successful physical-device
+startup has not been confirmed. A constant 60 FPS is not established.
 
-Install Git LFS before cloning. The game assets and packaged binaries use LFS;
-an ordinary source ZIP may contain pointer files instead of the game data.
+## Download
+
+Install Git LFS, then clone the repository to get actual game files:
 
 ```sh
 git lfs install
@@ -16,83 +17,53 @@ cd zombiewood-vita
 git lfs pull
 ```
 
-## Hardware package
+Source ZIP downloads may contain LFS pointers instead of the large assets.
 
-Use [FOR Vita](FOR%20Vita/). Copy its `data` directory to `ux0:` so the assets are
-at `ux0:data/zombiewood/`, then install `Zombiewood.vpk` with VitaShell.
+## Install on Vita
+
+Use [FOR Vita](FOR%20Vita/): copy its `data` directory to `ux0:`, then install
+`Zombiewood.vpk` with VitaShell. The library must be at
+`ux0:data/zombiewood/libZombieWood.so`.
+
 Read [INSTALL.txt](FOR%20Vita/INSTALL.txt) for kuBridge, shader compiler, optional
-FdFix setup and controls. The Sony shader compiler is not bundled.
+FdFix setup and controls. The Sony shader compiler is not included.
+When upgrading from 01.53/01.54, install the VPK; game data is unchanged.
+Keep existing save files when updating.
 
-The release uses 960×544 output, the game's middle device profile, conservative ETC1
-decoding and shader caching. Diagnostic input, tracing and profiling are disabled.
-The included SHA256SUMS.txt lists the package file checksums.
+## Original game files
 
-## PC testing
+The original APK is retained, and both OBBs remain in the runtime data folder
+so they are stored once in the current checkout:
 
-[Zombiewood_Vita3K_RenderFixed](Zombiewood_Vita3K_RenderFixed/) contains a separate
-Vita3K-compatible build with software ETC1 decoding and complete data. Vita3K and
-its firmware storage are not bundled. Close Vita3K, then run in PowerShell:
+- [Main APK — Zombiewood v1.5.3](originals/Zombiewood-v1.5.3.apk)
+- [Main OBB](FOR%20Vita/data/zombiewood/main.1501.com.gameloft.android.ANMP.GloftZOHM.obb)
+- [Patch OBB](FOR%20Vita/data/zombiewood/patch.15325.com.gameloft.android.ANMP.GloftZOHM.obb)
 
-```powershell
-./Zombiewood_Vita3K_RenderFixed/Launch.ps1 -Vita3KPath 'C:/path/to/Vita3K.exe'
-```
-
-The hardware VPK and emulator VPK use different texture and executable-loader
-paths; use the package for the intended device.
+The APK library matches the packaged `libZombieWood.so`. APK and hardware-package
+checksum lists are included in their respective folders. Game and assets: Gameloft.
 
 ## Source and building
 
-The repository root contains the matching final port source. Dependencies in
-`lib/` are vendored, including local compatibility fixes; no submodule checkout
-is needed. Use a compatible softfp VitaSDK with kuBridge, vitaShaRK,
+The root contains the final port source; `lib/` contains its vendored dependencies
+and license notices. Use a compatible softfp VitaSDK with kuBridge, vitaShaRK,
 SceShaccCgExt and the other libraries listed in CMakeLists.txt installed.
 
 ```sh
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
-  -DUSE_KUBRIDGE=ON -DPORT_VITA3K_COMPAT=OFF -DPORT_SHADER_CACHE=ON
+  -DUSE_KUBRIDGE=ON -DPORT_VITA3K_COMPAT=OFF \
+  -DPORT_SAFE_TEXTURES=ON -DPORT_SHADER_CACHE=ON
 cmake --build build --parallel 4
 ```
 
-VitaGL builds from its bundled source. The hardware data path defaults to
-`ux0:data/zombiewood/`. Original author/license notices are retained in source
-files; vitaGL license texts are also in the hardware package.
+The hardware release uses native 960x544, conservative ETC1 decoding, shader
+caching and the middle game device profile. It includes Vita controls, continuous
+stereo PCM buffering, corrected file/save compatibility and original loading art.
+Temporary tracing, test input and profiling are disabled in the packaged VPK.
+A small hardware startup log records initialization stages and memory counts.
 
-## Validation and remaining limits
+See [REVIEW.md](REVIEW.md) for the code review. Automated ARM checks passed 12/12
+thread tests and 8/8 PCM tests through Vita3K; these do not establish hardware boot.
+Package import, executable identity, VPK CRC and both OBB CRC checks passed.
 
-Vita3K rendered menus, original loading artwork and Survivalist combat. Eight
-deterministic PCM tests passed for left/right ordering, arbitrary split writes,
-paused buffering and output retry. All 364 Android import names are mapped;
-VPK and OBB CRCs and packaged executable identity passed verification.
-
-Physical-Vita testing is still outstanding. Stereo buffering was corrected,
-but an audible device listening check remains. Constant 60 FPS is not verified:
-non-loading combat measurements in Vita3K averaged about 39–54 FPS per bucket.
-The earlier fourth-mission crash has not been established as resolved. Test
-long sessions and suspend/resume on hardware before relying on stability.
-
-Game and assets: Gameloft. Third-party components retain their own licenses.
-This repository contains the requested source, assets and release packages;
-temporary profiling builds, emulator firmware/storage, backups and unrelated
-Air Attack HD files are excluded.
-
-## Hardware startup revision 01.54
-
-Revision 01.53 was reported to stop on the packaged Android startup image on a
-modded Vita-1000, with audio but no Gameloft logo. The data files and compiled
-paths are consistent locally; the files actually on the device were not inspected.
-Revision 01.54 uses kuBridge with checked executable-memory protection, conservative
-ETC1 decoding, a 128 MB application heap and 24 MB renderer memory headroom.
-It checks required data paths and records startup stages in
-ux0:data/zombiewood/hardware-startup.log. Install only the updated hardware VPK;
-the data is unchanged. This revision needs a physical-device retest and does not
-establish that the startup failure is resolved. The PC package is retained.
-
-## Compatibility review revision 01.55
-
-The current hardware VPK includes corrected pthread_once completion, serialized
-Android mutex/condition creation, preservation of requested thread stack sizes,
-64-bit semaphore deadlines and safe logger initialization. The ARM compatibility
-test passed 12/12 checks through Vita3K; the test runner is not in the VPK.
-See [REVIEW.md](REVIEW.md) for findings, the Backstab port comparison and limits.
-Physical-device startup is still not confirmed fixed. Install the updated VPK
-over the current application; game data is unchanged.
+The duplicate PC package, unused alternate implementation files, emulator
+storage, temporary builds and local backups are excluded from this checkout.
