@@ -215,8 +215,10 @@ static int so_load_internal(so_module *mod, SceUID so_blockid, void *so_data, ui
 				if (res < 0)
 					goto err_free_so;
 
-				sceKernelGetMemBlockBase(mod->patch_blockid, (void **) &mod->patch_base);
-				kuKernelMemProtect((void *) mod->patch_base, mod->patch_size, KU_KERNEL_PROT_EXEC | KU_KERNEL_PROT_WRITE | KU_KERNEL_PROT_READ);
+				res = sceKernelGetMemBlockBase(mod->patch_blockid, (void **) &mod->patch_base);
+				if (res < 0) goto err_free_text;
+				res = kuKernelMemProtect((void *) mod->patch_base, mod->patch_size, KU_KERNEL_PROT_EXEC | KU_KERNEL_PROT_WRITE | KU_KERNEL_PROT_READ);
+				if (res < 0) goto err_free_text;
 #endif
 				mod->patch_head = mod->patch_base;
 				
@@ -236,8 +238,11 @@ static int so_load_internal(so_module *mod, SceUID so_blockid, void *so_data, ui
 				if (res < 0)
 					goto err_free_so;
 				
-				sceKernelGetMemBlockBase(mod->text_blockid, &prog_data);
-				kuKernelMemProtect(prog_data, prog_size, KU_KERNEL_PROT_EXEC | KU_KERNEL_PROT_WRITE | KU_KERNEL_PROT_READ);
+				res = sceKernelGetMemBlockBase(mod->text_blockid, &prog_data);
+				if (res < 0) goto err_free_text;
+				if ((uintptr_t)prog_data != data_addr) { res = -5; goto err_free_text; }
+				res = kuKernelMemProtect(prog_data, prog_size, KU_KERNEL_PROT_EXEC | KU_KERNEL_PROT_WRITE | KU_KERNEL_PROT_READ);
+				if (res < 0) goto err_free_text;
 #endif
 				
 				mod->text_base = mod->phdr[i].p_vaddr;
@@ -274,7 +279,9 @@ static int so_load_internal(so_module *mod, SceUID so_blockid, void *so_data, ui
 				if (res < 0)
 					goto err_free_text;
 				
-				sceKernelGetMemBlockBase(mod->data_blockid[mod->n_data], &prog_data);
+				res = sceKernelGetMemBlockBase(mod->data_blockid[mod->n_data], &prog_data);
+				if (res < 0) { sceKernelFreeMemBlock(mod->data_blockid[mod->n_data]); goto err_free_text; }
+				if ((uintptr_t)prog_data != data_addr) { sceKernelFreeMemBlock(mod->data_blockid[mod->n_data]); res = -5; goto err_free_text; }
 #endif
 				data_addr = (uintptr_t)prog_data + prog_size;
 

@@ -44,6 +44,8 @@ extern "C" {
 
 void _log_print(int t, const char* fmt, ...)
                 __attribute__ ((format (printf, 2, 3)));
+void hardware_log_begin(void);
+void hardware_checkpoint(const char *stage);
 
 #ifdef __cplusplus
 };

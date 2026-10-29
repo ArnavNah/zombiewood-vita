@@ -23,8 +23,8 @@ at `ux0:data/zombiewood/`, then install `Zombiewood.vpk` with VitaShell.
 Read [INSTALL.txt](FOR%20Vita/INSTALL.txt) for kuBridge, shader compiler, optional
 FdFix setup and controls. The Sony shader compiler is not bundled.
 
-The release uses 960×544 output, the game's middle device profile, hardware ETC1
-textures and shader caching. Diagnostic input, tracing and profiling are disabled.
+The release uses 960×544 output, the game's middle device profile, conservative ETC1
+decoding and shader caching. Diagnostic input, tracing and profiling are disabled.
 The included SHA256SUMS.txt lists the package file checksums.
 
 ## PC testing
@@ -74,3 +74,15 @@ Game and assets: Gameloft. Third-party components retain their own licenses.
 This repository contains the requested source, assets and release packages;
 temporary profiling builds, emulator firmware/storage, backups and unrelated
 Air Attack HD files are excluded.
+
+## Hardware startup revision 01.54
+
+Revision 01.53 was reported to stop on the packaged Android startup image on a
+modded Vita-1000, with audio but no Gameloft logo. The data files and compiled
+paths are consistent locally; the files actually on the device were not inspected.
+Revision 01.54 uses kuBridge with checked executable-memory protection, conservative
+ETC1 decoding, a 128 MB application heap and 24 MB renderer memory headroom.
+It checks required data paths and records startup stages in
+ux0:data/zombiewood/hardware-startup.log. Install only the updated hardware VPK;
+the data is unchanged. This revision needs a physical-device retest and does not
+establish that the startup failure is resolved. The PC package is retained.

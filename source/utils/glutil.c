@@ -39,7 +39,9 @@ void gl_preload() {
 
 void gl_init() {
     vglSetShaderCachePath(DATA_PATH "shader_cache");
-    vglInitExtended(0, 960, 544, 6 * 1024 * 1024, SCE_GXM_MULTISAMPLE_NONE);
+    // Leave kernel/user memory for threads and shader compiler work after init.
+    // Vita3K does not enforce the physical device's available-memory budget.
+    vglInitExtended(0, 960, 544, 24 * 1024 * 1024, SCE_GXM_MULTISAMPLE_NONE);
 }
 
 void gl_swap() {

@@ -19,7 +19,11 @@ extern GLboolean gl_frame_has_scene(void);
 #include <pthread.h>
 #include <string.h>
 
+#ifdef USE_KUBRIDGE
+int _newlib_heap_size_user = 128 * 1024 * 1024;
+#else
 int _newlib_heap_size_user = 256 * 1024 * 1024;
+#endif
 
 #ifdef USE_SCELIBC_IO
 int sceLibcHeapSize = 4 * 1024 * 1024;
@@ -42,10 +46,12 @@ static void log_engine_state(void) {
 }
 
 static void *game_thread(void *arg) {
+    hardware_checkpoint("game thread entered");
     l_info("Game thread started.");
 
     io_migrate_legacy_saves();
     io_asset_index_init();
+    hardware_checkpoint("save paths and asset index ready");
 #ifdef PORT_TEST_INPUT
     audio_stream_test();
 #endif
@@ -53,12 +59,14 @@ static void *game_thread(void *arg) {
     // 1. JNI_OnLoad
     int (*JNI_OnLoad)(void *jvm) = (void *)so_symbol(&so_mod, "JNI_OnLoad");
     if (JNI_OnLoad) {
+        hardware_checkpoint("JNI_OnLoad begin");
         l_info("Calling JNI_OnLoad...");
         if (JNI_OnLoad(&jvm) != JNI_VERSION_1_4) {
             l_fatal("JNI_OnLoad failed");
             return NULL;
         }
     }
+    hardware_checkpoint("JNI_OnLoad complete");
 
     // JNI_OnLoad already calls AndroidOS_JNIOnload in Android v1.5.3.
 
@@ -76,6 +84,7 @@ static void *game_thread(void *arg) {
         jstring patch_obb = jni->NewStringUTF(&jni, OBB_PATCH_PATH);
         GL2JNILib_setPaths(&jni, (jclass)0x42424242, data, main_obb, patch_obb);
     }
+    hardware_checkpoint("Android data and OBB paths set");
 
     // Cache Java callbacks and device paths before creating the GL context.
     void (*Game_nativeInit)(JNIEnv *env, jclass clazz) = 
@@ -84,9 +93,13 @@ static void *game_thread(void *arg) {
         l_info("Calling Game_nativeInit...");
         Game_nativeInit(&jni, (jclass)0x42424242);
     }
+    hardware_checkpoint("Game native init complete");
 
+    hardware_checkpoint("shader compiler check");
     gl_preload();
+    hardware_checkpoint("renderer init begin");
     gl_init();
+    hardware_checkpoint("renderer init complete");
 
     // The active renderer in this APK is GL2JNIView (classes Game/at/as).
     // initGL alone is a two-byte no-op in the supplied Android library.
@@ -104,6 +117,7 @@ static void *game_thread(void *arg) {
     }
     l_info("Calling GL2JNILib_init...");
     GL2JNILib_init(&jni, (jclass)0x42424242);
+    hardware_checkpoint("GL2JNI init complete");
     l_info("Calling GL2JNILib_getViewSettings...");
     GL2JNILib_getViewSettings(&jni, (jclass)0x42424242);
     void (*GL2JNILib_setNumExtraContext)(JNIEnv *, jclass, jint) = (void *)so_symbol(&so_mod,
@@ -112,6 +126,7 @@ static void *game_thread(void *arg) {
         GL2JNILib_setNumExtraContext(&jni, (jclass)0x42424242, 0);
     GL2JNILib_resize(&jni, (jclass)0x42424242, SCREEN_W, SCREEN_H);
     GL2JNILib_stateChanged(&jni, (jclass)0x42424242, JNI_TRUE);
+    hardware_checkpoint("GL2JNI resize and state complete");
 
     void (*GL2JNILib_resume)(JNIEnv *, jclass) = (void *)so_symbol(&so_mod,
         "Java_com_gameloft_android_ANMP_GloftZOHM_GL2JNILib_resume");
@@ -147,8 +162,11 @@ static void *game_thread(void *arg) {
     const uint32_t frame_delta = 1000000 / DEFAULT_FPS;
     uint64_t frame_deadline = sceKernelGetProcessTimeWide();
     unsigned frames = 0;
+    bool first_presented = false;
+    unsigned logged_generation = ~0u, logged_states = 0;
 
     while (1) {
+        if (!frames) hardware_checkpoint("first frame begin");
         performance_begin();
         presentation_begin_frame();
         unsigned state_before = game_state_generation();
@@ -159,6 +177,12 @@ static void *game_thread(void *arg) {
         if (frames < 6) { log_engine_state(); l_info("Frame %u: calling GL2 renderer", frames); }
         if (GL2JNILib_step) {
             GL2JNILib_step(&jni, (jclass)0x42424242);
+        }
+        if (!frames) hardware_checkpoint("first native frame complete");
+        if (logged_states<16 && logged_generation!=game_state_generation()) {
+            hardware_checkpoint(game_state_name());
+            logged_generation=game_state_generation();
+            ++logged_states;
         }
 
         performance_game_done();
@@ -174,6 +198,10 @@ static void *game_thread(void *arg) {
         if (present || mission_trace_force_present()) {
             gl_swap();
             presentation_after_swap();
+            if (!first_presented) {
+                hardware_checkpoint("first display swap complete");
+                first_presented=true;
+            }
         }
         mission_trace_after_present();
         performance_present_done();
@@ -191,7 +219,10 @@ static void *game_thread(void *arg) {
 }
 
 int main(void) {
+    hardware_log_begin();
+    hardware_checkpoint("main entered");
     soloader_init_all();
+    hardware_checkpoint("loader initialization complete");
 
     pthread_t t;
     pthread_attr_t attr;

@@ -1,4 +1,4 @@
-Zombiewood for PlayStation Vita
+Zombiewood for PlayStation Vita - revision 01.54
 
 1. Copy the included data folder to the root of ux0: using VitaShell.
    The game library must be at ux0:data/zombiewood/libZombieWood.so.
@@ -27,15 +27,23 @@ Controls
 Release settings
 - Native 960 x 544 output; 60 FPS target.
 - The game's middle device profile reduces graphics load in busy fights.
-- Hardware ETC1 textures and compiled-shader caching are enabled.
+- Conservative ETC1 decoding and compiled-shader caching are enabled.
 - Continuous stereo PCM buffering preserves left/right channel order.
 - The original game loading animation is retained.
 
-This package contains the physical-Vita release. Its hardware texture path is
-different from the PC emulator build. Physical-Vita performance and long-session
-stability still need testing; a constant 60 FPS has not been established.
+This revision addresses the reported Vita-1000 startup failure before the first
+game frame. It uses the native kuBridge loader, a 128 MB application heap and
+24 MB of renderer memory headroom. These changes need a new hardware test;
+the reported startup failure is not yet confirmed resolved.
 The first launch may take longer while shaders are compiled and cached.
 
 Your existing PC saves are not overwritten or included in this clean package.
 If this title was previously installed on Vita, back up your save files before
 updating. Keep the game's .dat save files when replacing assets.
+
+Updating from revision 01.53
+Install the new Zombiewood.vpk over the existing application. The data files
+are unchanged; keep your saves. Do not copy the Vita3K VPK onto the Vita.
+If startup still fails, send ux0:data/zombiewood/hardware-startup.log and
+ux0:data/zombiewood/error.log if present. The startup log records initialization
+stages and memory counts; it does not record save contents or personal data.

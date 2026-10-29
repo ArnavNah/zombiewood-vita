@@ -15,6 +15,30 @@
 
 #include <stdbool.h>
 #include <stdatomic.h>
+#include <psp2/kernel/sysmem.h>
+#include <malloc.h>
+
+void hardware_log_begin(void) {
+#ifdef USE_KUBRIDGE
+    sceIoRemove(DATA_PATH "hardware-startup.log");
+#endif
+}
+
+void hardware_checkpoint(const char *stage) {
+#ifdef USE_KUBRIDGE
+    SceKernelFreeMemorySizeInfo memory = {.size = sizeof(memory)};
+    int result=sceKernelGetFreeMemorySize(&memory);
+    struct mallinfo heap=mallinfo();
+    char line[384];
+    int length=sceClibSnprintf(line,sizeof(line),"%s | memory_result=%d ram=%u cdram=%u phycont=%u heap_used=%u heap_free=%u\n",
+        stage,result,memory.size_user,memory.size_cdram,memory.size_phycont,
+        (unsigned)heap.uordblks,(unsigned)heap.fordblks);
+    if(length>0 && length<(int)sizeof(line)) {
+        SceUID fd=sceIoOpen(DATA_PATH "hardware-startup.log",SCE_O_WRONLY|SCE_O_CREAT|SCE_O_APPEND,0666);
+        if(fd>=0){sceIoWrite(fd,line,length);sceIoClose(fd);}
+    }
+#endif
+}
 
 #define COLOR_RED    "\x1B[38;5;196m"
 #define COLOR_PINK   "\x1B[38;5;212m"
